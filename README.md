@@ -40,5 +40,11 @@ controller
 # {}
 ```
 
+## Acknowledgment
+[pigpio Python examples](http://abyz.me.uk/rpi/pigpio/examples.html#Python%20code)
+
+## Contact
+kentkawashima@gmail.com
+
+
 License: MIT License  
-Contact: kentkawashima@gmail.com
