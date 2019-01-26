@@ -1,3 +1,5 @@
+import pigpio
+
 def carrier_square_wave_generator(gpio, frequency, signal_length):
     """
     Generate carrier square wave.
