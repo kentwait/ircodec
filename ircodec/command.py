@@ -3,15 +3,19 @@ IR command class and functions
 """
 import time
 import pigpio
-from ircodec.signal import Signal, PulseClass, GapClass
+from ircodec.signal import Pulse, Gap, PulseClass, GapClass
 from ircodec.signal import group_signals
 from ircodec.utils import carrier_square_wave_generator
+
 
 class Command(object):
     """Represents an IR command
     """
     def __init__(self, ir_signal_list, description=''):
         self.signal_list = ir_signal_list
+        if ir_signal_list and isinstance(ir_signal_list[0], int):
+            self.signal_list = [Gap(s) if i & 1 else Pulse(s) 
+                                for i, s in enumerate(ir_signal_list)]
         self.description = description
         self.signal_class_list = None
 
@@ -25,7 +29,7 @@ class Command(object):
 
         """
         pulse_classes, gap_classes = parse_command(self.signal_list, tolerance=tolerance)
-        self.normalize_from_classes(pulse_classes, gap_classes)
+        self.normalize_with(pulse_classes, gap_classes)
 
     def normalize_with(self, pulse_classes, gap_classes):
         """Normalizes the list of IR pulses and gaps using a set of
@@ -40,14 +44,12 @@ class Command(object):
         self.signal_list, self.signal_class_list = \
             normalize_command(self.signal_list, pulse_classes, gap_classes, return_class=True)
 
-    def emit(self, pi: pigpio.pi, emitter_gpio: int, freq=38.0, emit_gap=0.1):
+    def emit(self, emitter_gpio: int, freq=38.0, emit_gap=0.1):
         """Emits the IR command pulses and gaps to a connected
         Raspberry Pi using the pigpio daemon.
 
         Parameters
         ----------
-        pi : pigpio.pi
-            pigpio object that grants access to the Raspberry Pi GPIO.
         emmitter_gpio : int
             GPIO pin to output to
         freq : float
@@ -57,13 +59,14 @@ class Command(object):
 
         """
         # Create wave
+        pi = pigpio.pi()
         pi.set_mode(emitter_gpio, pigpio.OUTPUT)
         pi.wave_add_new()
         signals = {}
         gaps = {}
         wave_list = [0] * len(self.signal_list)
         emit_time = time.time()
-        for i, siglen in enumerate(self.signal_list):
+        for i, siglen in enumerate((s.length for s in self.signal_list)):
             if i & 1: # Space
                 if siglen not in gaps:
                     pi.wave_add_generic([pigpio.pulse(0, 0, siglen)])
@@ -77,11 +80,11 @@ class Command(object):
                 wave_list[i] = signals[siglen]
         delay = emit_time - time.time()
         if delay > 0.0:
-            sleep(delay)
+            time.sleep(delay)
         # Create wave chain
         pi.wave_chain(wave_list)
         while pi.wave_tx_busy():
-            sleep(0.002)
+            time.sleep(0.002)
         emit_time = time.time() + emit_gap
 
         # Remove signal waves
@@ -93,18 +96,18 @@ class Command(object):
         for gap in gaps.values():
             pi.wave_delete(gap)
         # gaps = {}
+        pi.stop()
+        time.sleep(0.1)
+
     
     @classmethod
-    def receive(cls, pi: pigpio.pi, receiver_gpio: int, 
-                description='', glitch=0.00000100, 
+    def receive(cls, receiver_gpio: int, description='', glitch=0.000100, 
                 pre_duration=0.2, post_duration=0.015, length_threshold=10):
         """Receives IR command pulses and gaps from GPIO pin of a connected
         Raspberry Pi using the pigpio daemon.
 
         Parameters
         ----------
-        pi : pigpio.pi
-            pigpio object that grants access to the Raspberry Pi GPIO.
         receiver_gpio : int
             GPIO pin to read signals from
         description : str
@@ -120,12 +123,12 @@ class Command(object):
 
         """
         # Convert values seconds to microsends
-        glitch = glitch * 1000 * 1000
-        pre_duration = pre_duration * 1000 * 1000
-        post_duration = post_duration * 1000 * 1000
+        glitch = int(glitch * 1000 * 1000)
+        pre_duration = int(pre_duration * 1000 * 1000)
+        post_duration = int(post_duration * 1000 * 1000)
 
         # Set initial values
-        fetching_code = True
+        fetching_code = False
         ir_signal_list = []
         in_code = False
         last_tick = 0
@@ -140,20 +143,20 @@ class Command(object):
                 if fetching_code == True:
                     if (edge > pre_duration) and (not in_code): # Start of a code.
                         in_code = True
-                        pi.set_watchdog(receiver_gpio, post_duration) # Start watchdog.
+                        pi.set_watchdog(gpio, post_duration) # Start watchdog.
                     elif (edge > post_duration) and in_code: # End of a code.
                         in_code = False
-                        pi.set_watchdog(receiver_gpio, 0) # Cancel watchdog.
+                        pi.set_watchdog(gpio, 0) # Cancel watchdog.
                         # Finish
                         if len(ir_signal_list) > length_threshold:
                             fetching_code = False
                         else:
                             ir_signal_list = []
-                            raise ValueError("Received IR command is too short, please try again")
+                            print("Received IR command is too short, please try again")
                     elif in_code:
                         ir_signal_list.append(edge)
             else:
-                pi.set_watchdog(receiver_gpio, 0) # Cancel watchdog.
+                pi.set_watchdog(gpio, 0) # Cancel watchdog.
                 if in_code:
                     in_code = False
                     # Finish
@@ -161,22 +164,31 @@ class Command(object):
                         fetching_code = False
                     else:
                         ir_signal_list = []
-                        raise ValueError("Received IR command is too short, please try again")
+                        print("Received IR command is too short, please try again")
+            # print(gpio, level, tick)
         
+        pi = pigpio.pi()
         pi.set_mode(receiver_gpio, pigpio.INPUT) # IR RX connected to this GPIO.
+        print('Connected to pigpio')
         pi.set_glitch_filter(receiver_gpio, glitch) # Ignore glitches.
+
         # Assign a callback function
+        print('Detecting IR command...')
         cb = pi.callback(receiver_gpio, pigpio.EITHER_EDGE, callback)
 
-        print("Receiving IR command...", end=' ')
+        fetching_code = True
         while fetching_code == True:
             time.sleep(0.1)
-        print("Received.")
+        print('Received.')
 
         pi.set_glitch_filter(receiver_gpio, 0) # Cancel glitch filter.
         pi.set_watchdog(receiver_gpio, 0) # Cancel watchdog.
-    
-    return cls(ir_signal_list, description=description)
+        pi.stop()
+        return cls([Gap(s) if i & 1 else Pulse(s) for i, s in enumerate(ir_signal_list)], 
+                   description=description)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.signal_list)
 
 
 def parse_command(ir_signal_list, tolerance=0.1):
@@ -206,8 +218,8 @@ def parse_command(ir_signal_list, tolerance=0.1):
     grouped_gaps = group_signals(ir_signal_list[1::2])
 
     # Classify into types
-    pulse_classes = [PulseClass(pulses) for pulses in grouped_pulses.values()]
-    gap_classes = [GapClass(gaps) for gaps in grouped_gaps.values()]
+    pulse_classes = [PulseClass(pulses) for pulses in grouped_pulses]
+    gap_classes = [GapClass(gaps) for gaps in grouped_gaps]
 
     return pulse_classes, gap_classes
 
@@ -234,13 +246,13 @@ def normalize_command(ir_signal_list, pulse_classes, gap_classes, return_class=F
 
     """
     signal_class_list = []
-    for pulse, gap in zip(signal_list[:-1:2], signal_list[1::2]):
+    for pulse, gap in zip(ir_signal_list[:-1:2], ir_signal_list[1::2]):
         pulse_type, gap_type = None, None
         for ptype in pulse_classes:
-            if ptype.istype(pulse):
+            if pulse in ptype:
                 pulse_type = ptype
         for gtype in gap_classes:
-            if gtype.istype(gap):
+            if gap in gtype:
                 gap_type = gtype
         if pulse_type == None:
             raise Exception('Could not normalize pulse: {}'.format(pulse))
@@ -250,9 +262,9 @@ def normalize_command(ir_signal_list, pulse_classes, gap_classes, return_class=F
         signal_class_list.append(gap_type)
     
     # Last pulse
-    pulse = signal_list[-1]
+    pulse = ir_signal_list[-1]
     for ptype in pulse_classes:
-        if ptype.istype(pulse):
+        if pulse in ptype:
             pulse_type = ptype
     if pulse_type == None:
         raise Exception('Could not normalize pulse: {}'.format(pulse))

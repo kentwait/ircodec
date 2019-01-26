@@ -58,6 +58,7 @@ class SignalClass(object):
     or imprecise measurement when the signals were received.
     """
     uid = 0
+    unit = Signal
     def __init__(self, signal_list):
         """Creates a new signal class from a list of
         similar signals considered to be the same.
@@ -88,15 +89,15 @@ class SignalClass(object):
     
     def normalized(self, normalized_value='int_mean'):
         if normalized_value == 'mean':
-            return self.mean
+            return self.__class__.unit(self.mean)
         elif normalized_value == 'int_mean':
-            return int(self.mean)
+            return self.__class__.unit(int(self.mean))
         elif normalized_value == 'mode':
-            return self.mode
+            return self.__class__.unit(self.mode)
         elif normalized_value == 'min':
-            return self.min
+            return self.__class__.unit(self.min)
         elif normalized_value == 'max':
-            return self.max
+            return self.__class__.unit(self.max)
         raise ValueError('Unrecognized normalized_value: {}'.format(normalized_value))
 
     def __contains__(self, signal):
@@ -113,6 +114,7 @@ class PulseClass(SignalClass):
     such that they are considered all to be the same IR pulse with some variance.
     """
     uid = 0
+    unit = Pulse
     def __init__(self, signal_list):
         """Creates a new pulse class from a list of
         similar IR pulses considered to be the same.
@@ -136,6 +138,7 @@ class GapClass(SignalClass):
     such that they are considered all to be the same kind of gap with some variance.
     """
     uid = 0
+    unit = Gap
     def __init__(self, signal_list):
         """Creates a new gap class from a list of
         similar gaps considered to be the same.
