@@ -85,7 +85,7 @@ class Command(object):
         pi.wave_chain(wave_list)
         while pi.wave_tx_busy():
             time.sleep(0.002)
-        emit_time = time.time() + emit_gap
+        # emit_time = time.time() + emit_gap
 
         # Remove signal waves
         for signal in signals.values():
@@ -97,7 +97,7 @@ class Command(object):
             pi.wave_delete(gap)
         # gaps = {}
         pi.stop()
-        time.sleep(0.1)
+        time.sleep(emit_gap)
 
     
     @classmethod
@@ -190,6 +190,98 @@ class Command(object):
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.signal_list)
 
+
+class CommandSet(object):
+    """Represents a set of IR commands.
+    For example, a CommandSet can be used to represent
+    all the commands of a single remote control.
+    """
+    def __init__(self, emitter_gpio=None, receiver_gpio=None, description=''):
+        """Creates a blank CommandSet
+
+        Parameters
+        ----------
+        emitter_gpio : int
+            GPIO pin to output to
+        receiver_gpio : int
+            GPIO pin to read from
+        description : str
+            Short description about the command set, usually describing the
+            device it controls.
+        """
+        self.emitter_gpio = emitter_gpio
+        self.receiver_gpio = receiver_gpio
+        self.commands = dict()
+        self.description = description
+
+    def set_receiver_gpio(self, gpio_pin):
+        """Sets the GPIO pin that is connected to the IR receiver
+
+        Parameters
+        ----------
+        gpio_pin : int
+
+        """
+        self.receiver_gpio = gpio_pin
+
+    def set_emitter_gpio(self, gpio_pin):
+        """Sets the GPIO pin that is connected to the IR transmitter
+
+        Parameters
+        ----------
+        gpio_pin : int
+
+        """
+        self.emitter_gpio = gpio_pin
+
+    def add(self, command_id, description='', **kwargs):
+        """Adds a new IR command to the command set.
+        This will initiate detection of IR signals from the IR receiver.
+
+        Parameters
+        ----------
+        command_id : int or str
+            Unique but descriptive used to refer to the command
+        description : str
+            Short description about the IR command
+        kwargs
+            Keyword arguments used by Command.receive to set-up
+            receiving IR signals
+
+        """
+        self.commands[command_id] = \
+            Command.receive(self.receiver_gpio, description=description, **kwargs)
+        self.commands[command_id].normalize()
+
+    def remove(self, command_id):
+        """Removes an IR command from the command set
+
+        Parameters
+        ----------
+        command_id : int or str
+            Key to retrieve the command
+        """
+        del self.commands[command_id]
+    
+    def emit(self, command_id, **kwargs):
+        """Emit the associated IR command for the given command_id.
+
+        Parameters
+        ----------
+        command_id : int or str
+            Key to retrieve the command
+        kwargs
+            Keyword arguments used by Command.emit to set-up
+            sending of IR signals
+   
+        """
+        self.commands[command_id].emit(self.emitter_gpio, **kwargs)
+    
+    def __repr__(self):
+        return '{}(emitter={}, receiver={}, description="{}")\n{}'.format(
+            self.__class__.__name__, self.emitter_gpio, self.receiver_gpio,
+            self.description, repr(self.commands)
+        )
 
 def parse_command(ir_signal_list, tolerance=0.1):
     """Parses the set of IR pulses and gaps received from
