@@ -1,6 +1,8 @@
 """
 Classes used to represent infrared pulses and gaps.
 """
+import json
+
 
 class Signal(object):
     """Generic IR signal class.
@@ -15,6 +17,17 @@ class Signal(object):
         
         """
         self.length = length
+
+    @classmethod
+    def from_json(cls, data):
+        if isinstance(data, str):
+            dct = json.loads(json_string)
+        elif isinstance(data, dict):
+            dct = data
+        return cls(dct['length'])
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: {**{'type': o.__class__.__name__}, **o.__dict__})
 
     def __repr__(self):
         return "{}({})".format(self.__class__.__name__, self.length)
@@ -99,6 +112,24 @@ class SignalClass(object):
         elif normalized_value == 'max':
             return self.__class__.unit(self.max)
         raise ValueError('Unrecognized normalized_value: {}'.format(normalized_value))
+
+    @classmethod
+    def from_json(cls, data):
+        if isinstance(data, str):
+            dct = json.loads(json_string)
+        elif isinstance(data, dict):
+            dct = data
+        sig_cls = cls.__new__(cls)
+        for name, value in dct.items():
+            if name == 'type':
+                continue
+            sig_cls.__setattr__(name, value)
+        if sig_cls.__class__.uid < sig_cls.uid:
+            sig_cls.__class__.uid = sig_cls.uid
+        return sig_cls
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: {**{'type': o.__class__.__name__}, **o.__dict__})
 
     def __contains__(self, signal):
         if signal.length >= self.min and signal.length <= self.max:
