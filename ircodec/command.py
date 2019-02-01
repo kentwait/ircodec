@@ -2,6 +2,7 @@
 IR command class and functions
 """
 import time
+import json
 import pigpio
 from ircodec.signal import Pulse, Gap, PulseClass, GapClass
 from ircodec.signal import group_signals
@@ -98,8 +99,22 @@ class Command(object):
         # gaps = {}
         pi.stop()
         time.sleep(emit_gap)
-
     
+    @classmethod
+    def from_json(cls, data):
+        if isinstance(data, str):
+            dct = json.loads(data)
+        elif isinstance(data, dict):
+            dct = data
+        cmd = cls.__new__(cls)
+        cmd.signal_list = [globals()[sig['type']].from_json(sig) for sig in dct['signal_list']]
+        cmd.description = dct['description']
+        cmd.signal_class_list = [globals()[sig_cls['type']].from_json(sig_cls) for sig_cls in dct['signal_class_list']] 
+        return cmd
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: {**{'type': o.__class__.__name__}, **o.__dict__})
+
     @classmethod
     def receive(cls, receiver_gpio: int, description='', glitch=0.000100, 
                 pre_duration=0.2, post_duration=0.015, length_threshold=10):
@@ -264,7 +279,7 @@ class CommandSet(object):
         del self.commands[command_id]
     
     def emit(self, command_id, **kwargs):
-        """Emit the associated IR command for the given command_id.
+        """Emit the IR command for the given command_id.
 
         Parameters
         ----------
@@ -276,12 +291,58 @@ class CommandSet(object):
    
         """
         self.commands[command_id].emit(self.emitter_gpio, **kwargs)
+
+    def send(self, command_id, **kwargs):
+        """Send the IR command for the given command_id. Same as emit.
+
+        Parameters
+        ----------
+        command_id : int or str
+            Key to retrieve the command
+        kwargs
+            Keyword arguments used by Command.emit to set-up
+            sending of IR signals
+   
+        """
+        self.emit(command_id, **kwargs)
+
+    @classmethod
+    def from_json(cls, data):
+        if isinstance(data, str):
+            dct = json.loads(data)
+        elif isinstance(data, dict):
+            dct = data
+        cmd_set = globals()[dct['type']].__new__(cls)
+        cmd_set.emitter_gpio = dct['emitter_gpio']
+        cmd_set.receiver_gpio = dct['receiver_gpio']
+        cmd_set.description = dct['description']
+        cmd_set.commands = {k: globals()[cmd['type']].from_json(cmd) for k, cmd in dct['commands'].items()}
+        return cmd_set
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: {**{'type': o.__class__.__name__}, **o.__dict__})
+
+    @classmethod
+    def load(cls, path, format='json'):
+        if format.lower() == 'json':
+            with open(path, 'r') as reader:
+                return cls.from_json(json.load(reader))
+        else:
+            raise NotImplementedError('selected format ({}) is not available'.format(format))
+
+    def save_as(self, path, format='json'):
+        if format.lower() == 'json':
+            with open(path, 'w') as writer:
+                print(self.to_json(), file=writer)
+        else:
+            raise NotImplementedError('selected format ({}) is not available'.format(format))
     
     def __repr__(self):
         return '{}(emitter={}, receiver={}, description="{}")\n{}'.format(
             self.__class__.__name__, self.emitter_gpio, self.receiver_gpio,
             self.description, repr(self.commands)
         )
+
 
 def parse_command(ir_signal_list, tolerance=0.1):
     """Parses the set of IR pulses and gaps received from

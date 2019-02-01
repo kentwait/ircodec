@@ -38,6 +38,13 @@ controller.remove('volume_up')
 controller
 # CommandSet(emitter=22, receiver=23, description="TV remote")
 # {}
+
+# Save to JSON
+controller.save_as('tv.json')
+
+# Load from JSON
+new_controller = CommandSet.load('another_tv.json')
+
 ```
 
 ## Acknowledgment
