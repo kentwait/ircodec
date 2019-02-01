@@ -10,8 +10,16 @@ pip install pigpio
 ```
 
 ## Install
+For Raspbian 9 (stretch)
 ```
 pip install ircodec
+```
+
+For others
+```
+git clone git@github.com:kentwait/ircodec.git
+cd ircodec
+python setup.py install
 ```
 
 ## Quickstart
