@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='ircodec',
-    version='0.1.0.post1',
+    version='0.2.0',
     author='Kent Kawashima',
     author_email='kentkawashima@gmail.com',
     description='Send and receive IR commands using pigpio',
