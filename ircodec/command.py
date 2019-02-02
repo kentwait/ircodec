@@ -109,6 +109,7 @@ class Command(object):
             dct = data
         cmd = cls.__new__(cls)
         cmd.signal_list = [globals()[sig['type']].from_json(sig) for sig in dct['signal_list']]
+        cmd.name = dct['name']
         cmd.description = dct['description']
         cmd.signal_class_list = [globals()[sig_cls['type']].from_json(sig_cls) for sig_cls in dct['signal_class_list']] 
         return cmd
@@ -117,13 +118,15 @@ class Command(object):
         return json.dumps(self, default=lambda o: {**{'type': o.__class__.__name__}, **o.__dict__})
 
     @classmethod
-    def receive(cls, receiver_gpio: int, description='', glitch=0.000100, 
+    def receive(cls, command_id, receiver_gpio: int, description='', glitch=0.000100, 
                 pre_duration=0.2, post_duration=0.015, length_threshold=10):
         """Receives IR command pulses and gaps from GPIO pin of a connected
         Raspberry Pi using the pigpio daemon.
 
         Parameters
         ----------
+        command_id : str
+            Name of the command
         receiver_gpio : int
             GPIO pin to read signals from
         description : str
@@ -200,11 +203,11 @@ class Command(object):
         pi.set_glitch_filter(receiver_gpio, 0) # Cancel glitch filter.
         pi.set_watchdog(receiver_gpio, 0) # Cancel watchdog.
         pi.stop()
-        return cls([Gap(s) if i & 1 else Pulse(s) for i, s in enumerate(ir_signal_list)], 
+        return cls(command_id, [Gap(s) if i & 1 else Pulse(s) for i, s in enumerate(ir_signal_list)], 
                    description=description)
 
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, self.signal_list)
+        return '{}(name={}, signal_list={})'.format(self.__class__.__name__, self.name, self.signal_list)
 
 
 class CommandSet(object):
@@ -267,7 +270,7 @@ class CommandSet(object):
 
         """
         self.commands[command_id] = \
-            Command.receive(self.receiver_gpio, description=description, **kwargs)
+            Command.receive(command_id, self.receiver_gpio, description=description, **kwargs)
         self.commands[command_id].normalize()
 
     def remove(self, command_id):
@@ -315,6 +318,7 @@ class CommandSet(object):
         elif isinstance(data, dict):
             dct = data
         cmd_set = globals()[dct['type']].__new__(cls)
+        cmd_set.name = dct['name']
         cmd_set.emitter_gpio = dct['emitter_gpio']
         cmd_set.receiver_gpio = dct['receiver_gpio']
         cmd_set.description = dct['description']
@@ -340,8 +344,8 @@ class CommandSet(object):
             raise NotImplementedError('selected format ({}) is not available'.format(format))
     
     def __repr__(self):
-        return '{}(emitter={}, receiver={}, description="{}")\n{}'.format(
-            self.__class__.__name__, self.emitter_gpio, self.receiver_gpio,
+        return '{}(name={}, emitter={}, receiver={}, description="{}")\n{}'.format(
+            self.__class__.__name__, self.name, self.emitter_gpio, self.receiver_gpio,
             self.description, repr(self.commands)
         )
 
