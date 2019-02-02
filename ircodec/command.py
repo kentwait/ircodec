@@ -12,7 +12,8 @@ from ircodec.utils import carrier_square_wave_generator
 class Command(object):
     """Represents an IR command
     """
-    def __init__(self, ir_signal_list, description=''):
+    def __init__(self, name, ir_signal_list, description=''):
+        self.name = name
         self.signal_list = ir_signal_list
         if ir_signal_list and isinstance(ir_signal_list[0], int):
             self.signal_list = [Gap(s) if i & 1 else Pulse(s) 
@@ -211,7 +212,7 @@ class CommandSet(object):
     For example, a CommandSet can be used to represent
     all the commands of a single remote control.
     """
-    def __init__(self, emitter_gpio=None, receiver_gpio=None, description=''):
+    def __init__(self, name, emitter_gpio=None, receiver_gpio=None, description=''):
         """Creates a blank CommandSet
 
         Parameters
@@ -224,6 +225,7 @@ class CommandSet(object):
             Short description about the command set, usually describing the
             device it controls.
         """
+        self.name = name
         self.emitter_gpio = emitter_gpio
         self.receiver_gpio = receiver_gpio
         self.commands = dict()
