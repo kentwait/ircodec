@@ -152,3 +152,6 @@ dmypy.json
 
 # Ignore json files at the root
 /*.json
+
+# Ignores pickle files
+*.pickle
