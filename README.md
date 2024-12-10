@@ -28,7 +28,7 @@ python setup.py install
 # GPIO for the IR receiver: 23
 # GPIO for the IR transmitter: 22
 from ircodec.command import CommandSet
-controller = CommandSet(emitter_gpio=22, receiver_gpio=23, description='TV remote')
+controller = CommandSet(name='TV', emitter_gpio=22, receiver_gpio=23, description='TV remote')
 
 # Add the volume up key
 controller.add('volume_up')
